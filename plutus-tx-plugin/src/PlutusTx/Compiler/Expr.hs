@@ -361,9 +361,10 @@ hoistExpr var t =
 
                 -- CompileContext {ccOpts=profileOpts} <- ask
                 t' <- do
+                        let ty = PLC.varDeclType var'
                     -- if coProfile profileOpts==All then do
                         t'' <- compileExpr t
-                        return $ trace "entering x" (\() -> trace "exiting x" t'') ()
+                        return $ mkTrace ty "entering" ((\() -> mkTrace ty "exiting" t'') ())
                     -- else compileExpr t
 
                 -- See Note [Non-strict let-bindings]
@@ -380,6 +381,17 @@ hoistExpr var t =
                     (PIR.Def var' (t', if strict then PIR.Strict else PIR.NonStrict))
                     (Set.map LexName deps)
                 pure $ PIR.mkVar () var'
+
+mkTrace
+    :: PLC.Type tyname uni ()
+    -> T.Text
+    -> PIRTerm uni fun
+    -> PIRTerm uni fun
+mkTrace ty str v =
+    PLC.mkIterApp
+        ()
+        (PIR.TyInst () (PIR.Builtin () PLC.Trace) ty)
+        [PLC.mkConstant () str, v]
 
 -- Expressions
 
