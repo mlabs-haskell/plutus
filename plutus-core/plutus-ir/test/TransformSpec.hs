@@ -18,6 +18,7 @@ import qualified PlutusIR.Transform.Beta            as Beta
 import qualified PlutusIR.Transform.DeadCode        as DeadCode
 import qualified PlutusIR.Transform.Inline          as Inline
 import qualified PlutusIR.Transform.LetFloat        as LetFloat
+import qualified PlutusIR.Transform.LetSplit        as LetSplit
 import qualified PlutusIR.Transform.LetMerge        as LetMerge
 import qualified PlutusIR.Transform.NonStrict       as NonStrict
 import           PlutusIR.Transform.Rename          ()
@@ -32,6 +33,7 @@ transform = testNested "transform" [
     thunkRecursions
     , nonStrict
     , letFloat
+    , letSplit
     , inline
     , beta
     , unwrapCancel
@@ -87,6 +89,42 @@ letFloat =
   ,"strictNonValueDeep"
   ,"regression1"
   ]
+
+letSplit :: TestNested
+letSplit =
+    testNested "letSplit"
+    $ map (goldenPir (LetSplit.letSplit . runQuote . PLC.rename) $ term @PLC.DefaultUni @PLC.DefaultFun)
+  [ "letInLet"
+  ,"listMatch"
+  ,"maybe"
+  ,"ifError"
+  ,"mutuallyRecursiveTypes"
+  ,"mutuallyRecursiveValues"
+  ,"nonrec1"
+  ,"nonrec2"
+  ,"nonrec3"
+  ,"nonrec4"
+  ,"nonrec6"
+  ,"nonrec7"
+  ,"nonrec8"
+  ,"rec1"
+  ,"rec2"
+  ,"rec3"
+  ,"rec4"
+  ,"nonrecToRec"
+  ,"nonrecToNonrec"
+  ,"oldLength"
+  ,"strictValue"
+  ,"strictNonValue"
+  ,"strictNonValue2"
+  ,"strictNonValue3"
+  ,"strictValueNonValue"
+  ,"strictValueValue"
+  ,"even3Eval"
+  ,"strictNonValueDeep"
+  ,"regression1"
+  ]
+
 
 instance Semigroup SourcePos where
   p1 <> _ = p1
