@@ -39,6 +39,7 @@ library
         Test.QuickCheck.StateModel
     build-depends:
         QuickCheck -any,
+        reflection -any,
         base >=4.7 && <5,
         containers -any,
         random -any,

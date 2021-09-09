@@ -147,7 +147,9 @@ test-suite plutus-use-cases-test
         QuickCheck -any,
         freer-simple -any,
         foldl -any,
-        streaming -any
+        streaming -any,
+        -- remove 
+        quickcheck-dynamic -any
 
     if !(impl(ghcjs) || os(ghcjs))
         build-depends: plutus-tx-plugin -any

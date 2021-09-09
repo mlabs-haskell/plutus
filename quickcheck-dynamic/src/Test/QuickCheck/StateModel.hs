@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
+{-# LANGUAGE ConstraintKinds       #-}
 module Test.QuickCheck.StateModel(
     StateModel(..)
   , Any(..)
@@ -20,8 +21,11 @@ module Test.QuickCheck.StateModel(
   , stateAfter
   , runActions
   , runActionsInState
+  , Given (..)
+  , give
 ) where
 
+import           Data.Reflection
 import           Data.Typeable
 
 import           Test.QuickCheck         as QC
@@ -110,8 +114,10 @@ instance (forall a. Show (Action state a)) => Show (Actions state) where
                     [showsPrec 0 a . (",\n  "++) | a <- init as]
 
 
-instance (Typeable state, StateModel state) => Arbitrary (Actions state) where
-  arbitrary = Actions <$> arbActions initialState 1
+-- instance (Typeable state, StateModel state) => Arbitrary (Actions state) where
+--   arbitrary = Actions <$> arbActions initialState 1
+instance (Typeable state, StateModel state, Given state) => Arbitrary (Actions state) where
+  arbitrary = Actions <$> arbActions given 1
     where
       arbActions :: state -> Int -> Gen [Step state]
       arbActions s step = sized $ \n ->
@@ -120,6 +126,7 @@ instance (Typeable state, StateModel state) => Arbitrary (Actions state) where
                      (w, do mact <- arbitraryAction s `suchThatMaybe`
                                       \a -> case a of
                                               Some act -> precondition s act
+                                              -- Some act -> True
                                               Error _  -> False
                             case mact of
                               Just (Some act) ->

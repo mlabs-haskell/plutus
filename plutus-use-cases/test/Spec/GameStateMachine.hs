@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments       #-}
 {-# LANGUAGE DataKinds            #-}
 {-# LANGUAGE DeriveFunctor        #-}
 {-# LANGUAGE FlexibleContexts     #-}
@@ -12,11 +13,11 @@
 {-# LANGUAGE TypeApplications     #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Spec.GameStateMachine
-  ( tests, successTrace, successTrace2, failTrace
-  , prop_Game, propGame'
-  , prop_NoLockedFunds
-  ) where
+module Spec.GameStateMachine where
+--   ( tests, successTrace, successTrace2, failTrace
+--   , prop_Game, propGame'
+--   , prop_NoLockedFunds
+--   ) where
 
 import           Control.Lens
 import           Control.Monad
@@ -35,6 +36,9 @@ import           Plutus.Contract.Test.ContractModel
 import           Plutus.Contracts.GameStateMachine  as G
 import           Plutus.Trace.Emulator              as Trace
 import qualified PlutusTx
+-- import           Test.QuickCheck.StateModel         (mkDummyState)
+import           Plutus.Contract.Test.ContractModel (mkModelState)
+import           Test.QuickCheck.StateModel         hiding (Actions, initialState)
 
 -- * QuickCheck model
 
@@ -48,6 +52,12 @@ makeLenses 'GameModel
 
 deriving instance Eq (ContractInstanceKey GameModel w schema err)
 deriving instance Show (ContractInstanceKey GameModel w schema err)
+
+-- dummyGameState :: ModelState GameModel
+-- dummyGameState = (dummyModelState initialState) & lastSlotL .~ 20000
+
+-- withModelState :: ModelState state -> (Given (ModelState state) => r) -> r
+-- withModelState = give
 
 instance ContractModel GameModel where
 
@@ -72,17 +82,17 @@ instance ContractModel GameModel where
         Lock w new val -> do
             callEndpoint @"lock" (handle $ WalletKey w)
                          LockArgs{lockArgsSecret = new, lockArgsValue = Ada.lovelaceValueOf val}
-            delay 2
+            delay 200
         Guess w old new val -> do
             callEndpoint @"guess" (handle $ WalletKey w)
                 GuessArgs{ guessArgsOldSecret = old
                          , guessArgsNewSecret = new
                          , guessArgsValueTakenOut = Ada.lovelaceValueOf val}
-            delay 1
+            delay 100
         GiveToken w' -> do
             let w = fromJust (s ^. contractState . hasToken)
             _ <- payToWallet w w' gameTokenVal
-            delay 1
+            delay 1000
 
     -- 'nextState' descibes how each command affects the state of the model
 
@@ -142,9 +152,9 @@ instance ContractModel GameModel where
 handleSpec :: [ContractInstanceSpec GameModel]
 handleSpec = [ ContractInstanceSpec (WalletKey w) w G.contract | w <- wallets ]
 
+s = mkModelState (initialState :: GameModel) & lastSlotL .~ 200
+
 -- | The main property. 'propRunActions_' checks that balances match the model after each test.
-prop_Game :: Actions GameModel -> Property
-prop_Game script = propRunActions_ handleSpec script
 
 propGame' :: LogLevel -> Actions GameModel -> Property
 propGame' l s = propRunActionsWithOptions
@@ -152,6 +162,24 @@ propGame' l s = propRunActionsWithOptions
                     handleSpec
                     (\ _ -> pure True)
                     s
+
+-- propGame' :: LogLevel -> Actions GameModel -> Property
+-- -- propGame' l s = propRunActionsWithOptions
+-- propGame' l s = withMaxSuccess 5 $ propRunActionsWithOptions
+--                     (set minLogLevel l defaultCheckOptions)
+--                     do
+--                         defaultCheckOptions
+--                             & minLogLevel .~ l
+--                             & maxSlot .~ 10000
+--                     handleSpec
+--                     (\ _ -> pure True)
+--                     s
+
+
+
+-- arb = give (initialState :: GameModel)
+
+runGameTests = withModelState (mkModelState (initialState :: GameModel) & lastSlotL .~ 200000)
 
 wallets :: [Wallet]
 wallets = [w1, w2, w3]
@@ -173,8 +201,19 @@ delay n = void $ Trace.waitNSlots (fromIntegral n)
 
 -- Dynamic Logic ----------------------------------------------------------
 
+f :: IO ()
+f =
+    (quickCheck
+        :: Testable ((Given (ModelState GameModel)) => Actions GameModel -> Property)
+        => (Given (ModelState GameModel) => Actions GameModel -> Property)
+        -> IO ()
+    ) prop_Game
+
+prop_Game :: Actions GameModel -> Property
+prop_Game = propRunActions_ handleSpec
+
 prop_UnitTest :: Property
-prop_UnitTest = withMaxSuccess 1 $ forAllDL unitTest prop_Game
+prop_UnitTest = forAllDL unitTest prop_Game
 
 unitTest :: DL GameModel ()
 unitTest = do
@@ -207,9 +246,13 @@ noLockedFunds = do
         action $ Guess w secret "" val
     assertModel "Locked funds should be zero" $ isZero . lockedValue
 
+-- nlf :: DL GameModel ()
+-- nlf = do
+--     anyActions_
+
 -- | Check that we can always get the money out of the guessing game (by guessing correctly).
 prop_NoLockedFunds :: Property
-prop_NoLockedFunds = forAllDL noLockedFunds prop_Game
+prop_NoLockedFunds = withMaxSuccess 30 $ forAllDL nlf prop_Game
 
 -- * Unit tests
 

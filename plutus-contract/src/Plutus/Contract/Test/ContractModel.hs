@@ -45,6 +45,7 @@ module Plutus.Contract.Test.ContractModel
     , askContractState
     , viewModelState
     , viewContractState
+    , withModelState
     -- ** The Spec monad
     --
     -- $specMonad
@@ -106,6 +107,13 @@ module Plutus.Contract.Test.ContractModel
     , TestStep(..)
     , FailedStep(..)
     , withDLTest
+
+    , lastSlotL
+    , currentSlotL
+    , balanceChangesL
+    , mintedL
+
+    , mkModelState
     ) where
 
 import           Control.Lens
@@ -211,8 +219,8 @@ data ModelState state = ModelState
         }
   deriving (Show)
 
-dummyModelState :: state -> ModelState state
-dummyModelState s = ModelState 0 0 Map.empty mempty s
+mkModelState :: state -> ModelState state
+mkModelState s = ModelState 0 0 Map.empty mempty s
 
 -- | The `Spec` monad is a state monad over the `ModelState`. It is used exclusively by the
 --   `nextState` function to model the effects of an action on the blockchain.
@@ -400,6 +408,11 @@ viewModelState l = askModelState (^. l)
 viewContractState :: GetModelState m => Getting a (StateType m) a -> m a
 viewContractState l = viewModelState (contractState . l)
 
+-- | A reexport of `give` that reifies model state to a type level
+-- so that it can be used in `r`.
+withModelState :: ModelState state -> (Given (ModelState state) => r) -> r
+withModelState = give
+
 -- $specMonad
 --
 -- The `Spec` monad is used in the `nextState` function to specify how the model state is affected
@@ -520,7 +533,7 @@ instance ContractModel state => StateModel (ModelState state) where
     shrinkAction s (ContractAction a) = [ Some @() (ContractAction a') | a' <- shrinkAction s a ]
 
     initialState = ModelState { _currentSlot    = 0
-                              , _lastSlot       = 125        -- Set by propRunActions
+                              , _lastSlot       = 1 -- Set by propRunActions
                               , _balanceChanges = Map.empty
                               , _minted         = mempty
                               , _contractState  = initialState }
@@ -567,7 +580,8 @@ instance ContractModel state => Show (Actions state) where
                   foldr (.) (showsPrec 0 (last as) . ("]"++))
                     [showsPrec 0 a . (",\n  "++) | a <- init as]
 
-instance ContractModel s => Arbitrary (Actions s) where
+instance (ContractModel s, Given (ModelState s)) => Arbitrary (Actions s) where
+-- instance (ContractModel s) => Arbitrary (Actions s) where
   arbitrary = fromStateModelActions <$> arbitrary
   shrink = map fromStateModelActions . shrink . toStateModelActions
 
@@ -642,14 +656,14 @@ instance ContractModel s => Show (TestStep s) where
 toDLTest :: ContractModel state =>
               DLTest state -> DL.DynLogicTest (ModelState state)
 toDLTest (BadPrecondition steps acts s) =
-  DL.BadPrecondition (toDLTestSteps steps) (map conv acts) (dummyModelState s)
+  DL.BadPrecondition (toDLTestSteps steps) (map conv acts) (mkModelState s)
     where
         conv (Action a) = Some (ContractAction a)
         conv (Assert e) = Error e
 toDLTest (Looping steps) =
   DL.Looping (toDLTestSteps steps)
 toDLTest (Stuck steps s) =
-  DL.Stuck (toDLTestSteps steps) (dummyModelState s)
+  DL.Stuck (toDLTestSteps steps) (mkModelState s)
 toDLTest (DLScript steps) =
   DL.DLScript (toDLTestSteps steps)
 
