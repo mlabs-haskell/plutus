@@ -59,6 +59,8 @@ library
         PlutusTx.Sqrt
         PlutusTx.Traversable
         PlutusTx.AssocMap
+        PlutusTx.UniqueMap
+        PlutusTx.UniqueMap.Internal
         PlutusTx.Trace
         PlutusTx.These
         PlutusTx.Code
@@ -91,6 +93,7 @@ library
         aeson -any,
         hashable -any,
         memory -any,
+        vector -any,
         serialise -any
 
 test-suite plutus-tx-test
